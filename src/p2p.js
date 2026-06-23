@@ -2,11 +2,10 @@ import { createLibp2p } from 'libp2p'
 import { tcp } from '@libp2p/tcp'
 import { webSockets } from '@libp2p/websockets'
 import { webRTC } from '@libp2p/webrtc'
-import { circuitRelayServer, circuitRelayTransport } from '@libp2p/circuit-relay-v2'
+import { circuitRelayTransport } from '@libp2p/circuit-relay-v2'
 import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
-import { bootstrap } from '@libp2p/bootstrap'
 import { dcutr } from '@libp2p/dcutr'
 import { ping } from '@libp2p/ping'
 import { multiaddr } from '@multiformats/multiaddr'
@@ -37,7 +36,7 @@ export function normalizeAddrForPeer (addr, peerId) {
   return text.includes('/p2p/') ? text : `${text}/p2p/${peerId}`
 }
 
-export async function createNode ({ listen, bootstrapAddrs = [], relay = false, useConfiguredRelays = true, onMessage } = {}) {
+export async function createNode ({ listen, useConfiguredRelays = true, onMessage } = {}) {
   const { privateKey } = await loadIdentity()
   const cfg = await loadConfig()
   const services = {
@@ -45,18 +44,7 @@ export async function createNode ({ listen, bootstrapAddrs = [], relay = false, 
     dcutr: dcutr(),
     ping: ping()
   }
-  if (relay) {
-    services.relay = circuitRelayServer()
-  }
-  const discovery = []
   const configuredRelays = useConfiguredRelays ? cfg.relays : []
-  const bootstrappers = [...new Set([
-    ...(bootstrapAddrs.length > 0 ? bootstrapAddrs : cfg.bootstrap),
-    ...configuredRelays
-  ])]
-  if (bootstrappers.length > 0) {
-    discovery.push(bootstrap({ list: bootstrappers }))
-  }
   const listenAddrs = listen ?? cfg.listen
   const relayListenAddrs = configuredRelays.length > 0 ? ['/p2p-circuit', '/webrtc'] : []
 
@@ -73,7 +61,6 @@ export async function createNode ({ listen, bootstrapAddrs = [], relay = false, 
     ],
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
-    peerDiscovery: discovery,
     connectionGater: {
       denyDialMultiaddr: () => false
     },

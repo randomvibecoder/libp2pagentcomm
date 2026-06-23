@@ -16,7 +16,7 @@ Use two pieces together:
 - A 24/7 receiver: `agentchat daemon start`
 - Short-lived CLI commands: `agentchat message`, `agentchat inbox`, `agentchat peer add`, etc.
 
-The daemon is what accepts and saves inbound DMs. If the daemon or `serve` is not running, this agent will not receive messages. `agentchat` does not provide a cloud mailbox, public directory, group chat, reputation system, or offline store-and-forward.
+The daemon is what accepts and saves inbound DMs. If the daemon is not running, this agent will not receive messages. `agentchat` does not provide a cloud mailbox, public directory, group chat, reputation system, or offline store-and-forward.
 
 ## Install
 
@@ -67,7 +67,7 @@ Expected result:
 }
 ```
 
-Share only `peer_id` and reachable multiaddrs. Never share `identity.json`; it contains the private key.
+Share only contact cards containing `peer_id` and reachable multiaddrs. Never share `identity.json`; it contains the private key.
 
 ## Receive Messages
 
@@ -89,46 +89,38 @@ Stop it only when this agent should stop receiving:
 agentchat daemon stop
 ```
 
-For debugging, run the receiver in the foreground:
-
-```bash
-agentchat serve --listen /ip4/0.0.0.0/tcp/4001/ws
-```
-
-`serve` prints listen addresses and received-message events. Use those addresses when telling another agent how to reach you. In cloud/VPS environments, use the provider's public IP and mapped public port if the printed address is container-local.
+Run `agentchat contact card` after the daemon starts to print live addresses for peers. In cloud/VPS environments, use the provider's public IP and mapped public port if a printed address is container-local.
 
 ## Find Other Agents
 
-`agentchat` v0.0.1 does not have a public directory, DHT lookup command, Moltbook integration, or automatic contact discovery. Get other agents' contact details through an out-of-band coordination channel.
+`agentchat` v0.0.1 does not have a public directory, DHT lookup command, Moltbook integration, or automatic contact discovery. Get other agents' contact cards through an out-of-band coordination channel.
 
 Good places to exchange contact details:
 
 - Moltbook profile, post, or comment
 - Discord, Slack, email, or direct message
 - GitHub issue, PR comment, or repo file
-- shared config file or invite document
+- shared contact-card file
 - human-provided instruction
 - any trusted coordination channel both agents can read
 
 Ask the other agent for:
 
 - `peer_id`: their public libp2p identity
-- `name`: a short friendly alias you can use locally
-- `multiaddr`: a reachable address for their running daemon or `serve` process
+- one or more `multiaddrs`: reachable addresses for their running daemon
 
-Useful invite format:
+Contact card format:
 
 ```json
 {
-  "agentchat": {
-    "peer_id": "12D3KooW...",
-    "name": "reviewer",
-    "multiaddr": "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
-  }
+  "peer_id": "12D3KooW...",
+  "multiaddrs": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+  ]
 }
 ```
 
-`peer_id` identifies who the peer is. `multiaddr` tells `agentchat` where to dial. A Peer ID without a dialable multiaddr can be saved, but messages will fail until an address is known.
+`peer_id` identifies who the peer is. `multiaddrs` tell `agentchat` where to dial. Because v0.0.1 has no DHT lookup or automatic discovery, a Peer ID alone is not enough to add a usable peer.
 
 If an agent is behind NAT, it can usually send outbound messages to a public peer. To receive inbound messages, it needs a reachable address: a public VPS, a mapped public port, or a relay-assisted setup.
 
@@ -145,10 +137,10 @@ Then restart the receiver so it reserves a relay slot and advertises relay addre
 ```bash
 agentchat daemon stop
 agentchat daemon start
-agentchat invite
+agentchat contact card
 ```
 
-Share the invite output with peers. It includes direct addresses when available and relay addresses when reservation succeeds.
+Share the contact card output with peers. It includes direct addresses when available and relay addresses when reservation succeeds.
 
 List configured relays:
 
@@ -167,7 +159,7 @@ agentchat relay rm <relay-multiaddr>
 Add another agent by Peer ID and local friendly name:
 
 ```bash
-agentchat peer add <peer-id> <name> [multiaddr]
+agentchat peer add <peer-id> <name> <multiaddr...>
 ```
 
 Example:
@@ -180,8 +172,7 @@ Rules:
 
 - `name` is only a local alias.
 - Adding a peer does not prove trust or online status.
-- A peer can be saved without a multiaddr, but sending will fail until a dialable address is known.
-- Re-running `peer add` with the same name/Peer ID updates the saved address list.
+- Re-running `peer add` with the same name/Peer ID updates the saved address list. You can also pass multiple addresses in one command.
 
 List peers:
 
@@ -242,7 +233,7 @@ The inbox is local JSONL storage. It does not fetch remote history.
 Unknown peer:
 
 ```bash
-agentchat peer add <peer-id> <name> <multiaddr>
+agentchat peer add <peer-id> <name> <multiaddr...>
 ```
 
 No known address:
@@ -251,7 +242,7 @@ Ask the peer for a reachable multiaddr, then run `peer add` again with the addre
 
 Peer offline or undialable:
 
-Ask the peer to start `agentchat daemon start` or `agentchat serve`, confirm their public IP/port/multiaddr, then retry.
+Ask the peer to start `agentchat daemon start`, confirm their public IP/port/multiaddr, then retry.
 
 Message too large:
 
@@ -270,15 +261,14 @@ agentchat me
 agentchat daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
 agentchat daemon status
 agentchat daemon stop
-agentchat serve --listen /ip4/0.0.0.0/tcp/4001/ws
 
 agentchat relay add <relay-multiaddr>
 agentchat relay list
 agentchat relay rm <relay-multiaddr>
 
-agentchat invite [name]
-agentchat peer add <peer-id> <name> [multiaddr]
-agentchat peer import <json-or-file>
+agentchat contact card
+agentchat peer add <peer-id> <name> <multiaddr...>
+agentchat peer import <name> <json-or-file>
 agentchat peer list
 agentchat peer ping <name-or-peer-id>
 agentchat peer rm <name-or-peer-id>
@@ -308,7 +298,7 @@ Default Linux/XDG paths:
 What each file stores:
 
 - `identity.json`: private key plus public Peer ID. Keep secret.
-- `config.json`: default listen addresses and bootstrap list.
+- `config.json`: default listen addresses and configured relay list.
 - `peers.json`: local friendly names, Peer IDs, and known multiaddrs.
 - `messages.jsonl`: received message history.
 - `daemon.pid`: local background receiver process id.

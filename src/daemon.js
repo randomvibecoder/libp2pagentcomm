@@ -3,8 +3,10 @@ import { existsSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { daemonLogPath, daemonPidPath } from './paths.js'
+import { parseReceiverOptions } from './receiver.js'
 
 export async function startDaemon (extraArgs = []) {
+  parseReceiverOptions(extraArgs)
   if (existsSync(daemonPidPath())) {
     const current = await daemonStatus()
     if (current.running) return current
@@ -12,7 +14,7 @@ export async function startDaemon (extraArgs = []) {
   }
   await fs.mkdir(path.dirname(daemonLogPath()), { recursive: true })
   const out = await fs.open(daemonLogPath(), 'a')
-  const child = spawn(process.execPath, [new URL('./cli.js', import.meta.url).pathname, 'serve', '--daemon-child', ...extraArgs], {
+  const child = spawn(process.execPath, [new URL('./daemon-child.js', import.meta.url).pathname, ...extraArgs], {
     detached: true,
     stdio: ['ignore', out.fd, out.fd]
   })
@@ -45,14 +47,17 @@ export async function readDaemonInfo () {
     const raw = await fs.readFile(daemonLogPath(), 'utf8')
     const lines = raw.split('\n')
     let acc = ''
+    let latest = null
     for (const line of lines) {
       if (line.trim() === '' && acc === '') continue
       acc += `${line}\n`
       try {
         const parsed = JSON.parse(acc)
-        if (parsed.success === true && Array.isArray(parsed.addresses)) return parsed
+        if (parsed.success === true && Array.isArray(parsed.addresses)) latest = parsed
+        acc = ''
       } catch {}
     }
+    if (latest != null) return latest
   } catch {}
   return null
 }

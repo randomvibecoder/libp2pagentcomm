@@ -86,7 +86,6 @@ export async function addRelay (addr) {
   multiaddr(addr)
   const cfg = await loadConfig()
   if (!cfg.relays.includes(addr)) cfg.relays.push(addr)
-  if (!cfg.bootstrap.includes(addr)) cfg.bootstrap.push(addr)
   await saveConfig(cfg)
   return cfg.relays
 }
@@ -100,7 +99,7 @@ export async function removeRelay (addr) {
   return before - cfg.relays.length
 }
 
-export async function importPeerInvite (input) {
+export async function importPeerContact (input, localName) {
   let payload = input
   if (typeof input === 'string') {
     try {
@@ -113,7 +112,7 @@ export async function importPeerInvite (input) {
 
   const card = payload.agentchat ?? payload
   const peerId = card.peer_id ?? card.peerId
-  const name = card.name ?? card.alias
+  const name = localName ?? card.name ?? card.alias
   const addrs = [
     ...(card.multiaddr != null ? [card.multiaddr] : []),
     ...(card.multiaddrs ?? []),
@@ -122,16 +121,15 @@ export async function importPeerInvite (input) {
   ].filter(Boolean)
 
   if (peerId == null || name == null) {
-    throw new Error('Invite must include peer_id and name.')
+    throw new Error('Contact card must include peer_id and peer import must include a local name.')
+  }
+  if (addrs.length === 0) {
+    throw new Error('Contact card must include at least one multiaddr.')
   }
 
   let peer
-  if (addrs.length === 0) {
-    peer = await addPeer(peerId, name)
-  } else {
-    for (const addr of addrs) {
-      peer = await addPeer(peerId, name, addr)
-    }
+  for (const addr of addrs) {
+    peer = await addPeer(peerId, name, addr)
   }
   return peer
 }
@@ -153,7 +151,8 @@ export async function addPeer (peerIdText, name, addr) {
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(name)) {
     throw new Error('Peer name must be 1-64 chars using letters, numbers, dot, underscore, or hyphen.')
   }
-  if (addr != null) multiaddr(addr)
+  if (addr == null) throw new Error('Peer multiaddr is required.')
+  multiaddr(addr)
 
   const book = await loadPeers()
   if (book.peers.some(p => p.name === name && p.peer_id !== peerId)) {
@@ -163,13 +162,13 @@ export async function addPeer (peerIdText, name, addr) {
   if (existing != null) {
     existing.peer_id = peerId
     existing.name = name
-    if (addr != null && !existing.addresses.includes(addr)) existing.addresses.push(addr)
+    if (!existing.addresses.includes(addr)) existing.addresses.push(addr)
     existing.updated_at = new Date().toISOString()
   } else {
     book.peers.push({
       peer_id: peerId,
       name,
-      addresses: addr == null ? [] : [addr],
+      addresses: [addr],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     })
