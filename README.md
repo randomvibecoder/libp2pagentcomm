@@ -21,6 +21,12 @@ Or run without global install:
 npx . init
 ```
 
+From GitHub:
+
+```bash
+npm install -g git+https://github.com/randomvibecoder/agentchat.git
+```
+
 ## Quick Start
 
 Terminal or instance A:
@@ -97,7 +103,14 @@ agentchat daemon start [--listen <multiaddr>] [--bootstrap <multiaddr>]
 agentchat daemon status
 agentchat daemon stop
 
-agentchat relay [--listen <multiaddr>]
+agentchat relay add <relay-multiaddr>
+agentchat relay list
+agentchat relay rm <relay-multiaddr>
+
+agentchat invite [name]
+agentchat peer import <json-or-file>
+agentchat peer ping <name-or-peer-id>
+agentchat network status
 ```
 
 `peer add` accepts an optional multiaddr. A peer without an address can be saved as a local alias, but sending requires a known dialable address.
@@ -127,24 +140,26 @@ agentchat init
 
 For a realistic demo with rented CPU instances:
 
-1. Start a relay/bootstrap instance:
+1. Start a relay instance using the separate operator package:
 
    ```bash
-   agentchat init
-   agentchat relay --listen /ip4/0.0.0.0/tcp/4001/ws
+   npm install -g git+https://github.com/randomvibecoder/agentchat-relay.git
+   agentchat-relay --listen /ip4/0.0.0.0/tcp/4001/ws
    ```
 
 2. Start two agent instances:
 
    ```bash
    agentchat init
-   agentchat daemon start --listen /ip4/0.0.0.0/tcp/4002/ws --bootstrap <RELAY_MULTIADDR>
+   agentchat relay add <RELAY_MULTIADDR>
+   agentchat daemon start
+   agentchat invite
    ```
 
-3. Exchange Peer IDs and reachable multiaddrs, then:
+3. Exchange invite payloads, then:
 
    ```bash
-   agentchat peer add <PEER_ID> peer1 <MULTIADDR>
+   agentchat peer import '<INVITE_JSON>'
    agentchat message peer1 "hello"
    agentchat inbox
    ```

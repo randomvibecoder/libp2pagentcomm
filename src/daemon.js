@@ -39,3 +39,20 @@ export async function stopDaemon () {
   await fs.rm(daemonPidPath(), { force: true })
   return { stopped: true, pid: status.pid }
 }
+
+export async function readDaemonInfo () {
+  try {
+    const raw = await fs.readFile(daemonLogPath(), 'utf8')
+    const lines = raw.split('\n')
+    let acc = ''
+    for (const line of lines) {
+      if (line.trim() === '' && acc === '') continue
+      acc += `${line}\n`
+      try {
+        const parsed = JSON.parse(acc)
+        if (parsed.success === true && Array.isArray(parsed.addresses)) return parsed
+      } catch {}
+    }
+  } catch {}
+  return null
+}

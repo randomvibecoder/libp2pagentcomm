@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { daemonStatus, startDaemon, stopDaemon } from './daemon.js'
+import { daemonStatus, readDaemonInfo, startDaemon, stopDaemon } from './daemon.js'
 import { configPath, daemonLogPath, identityPath, messagesPath, peersPath } from './paths.js'
-import { createNode, sendMessage } from './p2p.js'
-import { addPeer, findPeer, listMessages, loadConfig, loadIdentity, loadOrCreateIdentity, loadPeers, removePeer } from './storage.js'
+import { createNode, pingPeer, sendMessage } from './p2p.js'
+import { addPeer, addRelay, findPeer, importPeerInvite, listMessages, loadConfig, loadIdentity, loadOrCreateIdentity, loadPeers, removePeer, removeRelay } from './storage.js'
 import { fail, ok } from './output.js'
 
 function parseOptions (args) {
@@ -16,6 +16,10 @@ function parseOptions (args) {
     else positional.push(arg)
   }
   return { positional, opts }
+}
+
+function sleep (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 async function main () {
@@ -39,7 +43,7 @@ async function main () {
   if (cmd === 'me') {
     const { peerId } = await loadIdentity()
     const cfg = await loadConfig()
-    return ok({ peer_id: peerId.toString(), listen: cfg.listen, bootstrap: cfg.bootstrap })
+    return ok({ peer_id: peerId.toString(), listen: cfg.listen, bootstrap: cfg.bootstrap, relays: cfg.relays })
   }
 
   if (cmd === 'peer') {
@@ -56,7 +60,19 @@ async function main () {
     if (subcmd === 'list') {
       return ok(await loadPeers())
     }
-    throw new Error('Usage: agentchat peer <add|rm|list>')
+    if (subcmd === 'import') {
+      const input = positional.join(' ')
+      if (input.length === 0) throw new Error('Usage: agentchat peer import <json-or-file>')
+      return ok({ peer: await importPeerInvite(input) })
+    }
+    if (subcmd === 'ping') {
+      const [nameOrPeerId] = positional
+      if (nameOrPeerId == null) throw new Error('Usage: agentchat peer ping <name-or-peer-id>')
+      const peer = await findPeer(nameOrPeerId)
+      if (peer == null) throw new Error(`Unknown peer: ${nameOrPeerId}`)
+      return ok(await pingPeer({ peer }))
+    }
+    throw new Error('Usage: agentchat peer <add|rm|list|import|ping>')
   }
 
   if (cmd === 'message') {
@@ -88,7 +104,62 @@ async function main () {
     throw new Error('Usage: agentchat daemon <start|status|stop>')
   }
 
+  if (cmd === 'invite') {
+    const { peerId } = await loadIdentity()
+    const cfg = await loadConfig()
+    const info = await readDaemonInfo()
+    const addresses = info?.addresses ?? []
+    const direct = addresses.filter(addr => !addr.includes('/p2p-circuit') && !addr.includes('/webrtc'))
+    const relayAddrs = addresses.filter(addr => addr.includes('/p2p-circuit') || addr.includes('/webrtc'))
+    return ok({
+      agentchat: {
+        peer_id: peerId.toString(),
+        name: subcmd ?? positional[0] ?? 'agent',
+        multiaddrs: addresses,
+        direct_addresses: direct,
+        relay_addresses: relayAddrs,
+        configured_relays: cfg.relays
+      },
+      daemon_running: (await daemonStatus()).running,
+      hint: addresses.length === 0 ? 'Start `agentchat daemon start` or `agentchat serve` to advertise live dialable addresses.' : undefined
+    })
+  }
+
+  if (cmd === 'network') {
+    if (subcmd === 'status') {
+      const { peerId } = await loadIdentity()
+      const cfg = await loadConfig()
+      const daemon = await daemonStatus()
+      const info = await readDaemonInfo()
+      return ok({
+        peer_id: peerId.toString(),
+        daemon,
+        listen: cfg.listen,
+        relays: cfg.relays,
+        bootstrap: cfg.bootstrap,
+        advertised_addresses: info?.addresses ?? []
+      })
+    }
+    throw new Error('Usage: agentchat network status')
+  }
+
   if (cmd === 'serve' || cmd === 'relay') {
+    if (cmd === 'relay' && ['add', 'list', 'rm'].includes(subcmd)) {
+      if (subcmd === 'add') {
+        const [addr] = positional
+        if (addr == null) throw new Error('Usage: agentchat relay add <relay-multiaddr>')
+        return ok({ relays: await addRelay(addr) })
+      }
+      if (subcmd === 'list') {
+        const cfg = await loadConfig()
+        return ok({ relays: cfg.relays })
+      }
+      if (subcmd === 'rm') {
+        const [addr] = positional
+        if (addr == null) throw new Error('Usage: agentchat relay rm <relay-multiaddr>')
+        return ok({ removed: await removeRelay(addr) })
+      }
+    }
     const { opts: serveOpts } = parseOptions(commandArgs.slice(1))
     await loadOrCreateIdentity()
     const relay = cmd === 'relay'
@@ -101,6 +172,7 @@ async function main () {
       }
     })
     const { peerId } = await loadIdentity()
+    await sleep(1500)
     process.stdout.write(`${JSON.stringify({
       success: true,
       mode: relay ? 'relay' : 'serve',
@@ -116,7 +188,7 @@ async function main () {
     return
   }
 
-  throw new Error('Usage: agentchat <init|me|peer|message|inbox|read|daemon|serve|relay>')
+  throw new Error('Usage: agentchat <init|me|invite|peer|message|inbox|read|daemon|network|serve|relay>')
 }
 
 main().catch(err => fail(err.message, err.code || 'ERROR'))

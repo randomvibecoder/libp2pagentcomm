@@ -7,6 +7,8 @@ import { noise } from '@chainsafe/libp2p-noise'
 import { yamux } from '@chainsafe/libp2p-yamux'
 import { identify } from '@libp2p/identify'
 import { bootstrap } from '@libp2p/bootstrap'
+import { dcutr } from '@libp2p/dcutr'
+import { ping } from '@libp2p/ping'
 import { multiaddr } from '@multiformats/multiaddr'
 import { peerIdFromString } from '@libp2p/peer-id'
 import { MAX_MESSAGE_BYTES, PROTOCOL } from './constants.js'
@@ -35,25 +37,33 @@ export function normalizeAddrForPeer (addr, peerId) {
   return text.includes('/p2p/') ? text : `${text}/p2p/${peerId}`
 }
 
-export async function createNode ({ listen, bootstrapAddrs = [], relay = false, onMessage } = {}) {
+export async function createNode ({ listen, bootstrapAddrs = [], relay = false, useConfiguredRelays = true, onMessage } = {}) {
   const { privateKey } = await loadIdentity()
   const cfg = await loadConfig()
   const services = {
-    identify: identify()
+    identify: identify(),
+    dcutr: dcutr(),
+    ping: ping()
   }
   if (relay) {
     services.relay = circuitRelayServer()
   }
   const discovery = []
-  const bootstrappers = bootstrapAddrs.length > 0 ? bootstrapAddrs : cfg.bootstrap
+  const configuredRelays = useConfiguredRelays ? cfg.relays : []
+  const bootstrappers = [...new Set([
+    ...(bootstrapAddrs.length > 0 ? bootstrapAddrs : cfg.bootstrap),
+    ...configuredRelays
+  ])]
   if (bootstrappers.length > 0) {
     discovery.push(bootstrap({ list: bootstrappers }))
   }
+  const listenAddrs = listen ?? cfg.listen
+  const relayListenAddrs = configuredRelays.length > 0 ? ['/p2p-circuit', '/webrtc'] : []
 
   const node = await createLibp2p({
     privateKey,
     addresses: {
-      listen: listen ?? cfg.listen
+      listen: [...listenAddrs, ...relayListenAddrs]
     },
     transports: [
       tcp(),
@@ -64,8 +74,19 @@ export async function createNode ({ listen, bootstrapAddrs = [], relay = false, 
     connectionEncrypters: [noise()],
     streamMuxers: [yamux()],
     peerDiscovery: discovery,
+    connectionGater: {
+      denyDialMultiaddr: () => false
+    },
     services
   })
+
+  for (const addr of configuredRelays) {
+    try {
+      await node.dial(multiaddr(addr), { signal: AbortSignal.timeout(5000) })
+    } catch (err) {
+      process.stderr.write(`${JSON.stringify({ event: 'relay_dial_error', relay: addr, error: err.message })}\n`)
+    }
+  }
 
   if (onMessage != null) {
     await node.handle(PROTOCOL, async (stream, connection) => {
@@ -88,6 +109,8 @@ export async function createNode ({ listen, bootstrapAddrs = [], relay = false, 
         process.stderr.write(`${JSON.stringify({ event: 'message_error', error: err.message })}\n`)
         throw err
       }
+    }, {
+      runOnLimitedConnection: true
     })
   }
 
@@ -105,13 +128,16 @@ export async function sendMessage ({ peer, body }) {
 
   const { peerId } = await loadIdentity()
   peerIdFromString(peer.peer_id)
-  const node = await createNode({ listen: [] })
+  const node = await createNode({ listen: [], useConfiguredRelays: false })
   try {
     const addrs = peer.addresses.map(addr => multiaddr(normalizeAddrForPeer(addr, peer.peer_id)))
     let lastErr
     for (const addr of addrs) {
       try {
-        const stream = await node.dialProtocol(addr, PROTOCOL)
+        const stream = await node.dialProtocol(addr, PROTOCOL, {
+          runOnLimitedConnection: true,
+          signal: AbortSignal.timeout(10000)
+        })
         const msg = {
           id: messageId(),
           from: peerId.toString(),
@@ -127,6 +153,28 @@ export async function sendMessage ({ peer, body }) {
       }
     }
     throw lastErr ?? new Error('No dial attempts were made.')
+  } finally {
+    await node.stop()
+  }
+}
+
+export async function pingPeer ({ peer }) {
+  if (peer.addresses.length === 0) {
+    throw new Error(`Peer has no known addresses: ${peer.name}`)
+  }
+  const node = await createNode({ listen: [], useConfiguredRelays: false })
+  try {
+    let lastErr
+    for (const addrText of peer.addresses) {
+      const addr = multiaddr(normalizeAddrForPeer(addrText, peer.peer_id))
+      try {
+        const latency = await node.services.ping.ping(addr, { signal: AbortSignal.timeout(5000) })
+        return { peer_id: peer.peer_id, name: peer.name, dialed: addr.toString(), latency_ms: Number(latency) }
+      } catch (err) {
+        lastErr = err
+      }
+    }
+    throw lastErr ?? new Error('No ping attempts were made.')
   } finally {
     await node.stop()
   }

@@ -58,17 +58,82 @@ export async function loadIdentity () {
 
 export async function loadConfig () {
   const cfg = await readJson(configPath(), null)
-  if (cfg != null) return cfg
+  if (cfg != null) {
+    return {
+      listen: cfg.listen ?? DEFAULT_LISTEN_ADDRS,
+      bootstrap: cfg.bootstrap ?? [],
+      relays: cfg.relays ?? []
+    }
+  }
   const created = {
     listen: DEFAULT_LISTEN_ADDRS,
-    bootstrap: []
+    bootstrap: [],
+    relays: []
   }
   await writeJson(configPath(), created)
   return created
 }
 
 export async function saveConfig (cfg) {
-  await writeJson(configPath(), cfg)
+  await writeJson(configPath(), {
+    listen: cfg.listen ?? DEFAULT_LISTEN_ADDRS,
+    bootstrap: cfg.bootstrap ?? [],
+    relays: cfg.relays ?? []
+  })
+}
+
+export async function addRelay (addr) {
+  multiaddr(addr)
+  const cfg = await loadConfig()
+  if (!cfg.relays.includes(addr)) cfg.relays.push(addr)
+  if (!cfg.bootstrap.includes(addr)) cfg.bootstrap.push(addr)
+  await saveConfig(cfg)
+  return cfg.relays
+}
+
+export async function removeRelay (addr) {
+  const cfg = await loadConfig()
+  const before = cfg.relays.length
+  cfg.relays = cfg.relays.filter(existing => existing !== addr)
+  cfg.bootstrap = cfg.bootstrap.filter(existing => existing !== addr)
+  await saveConfig(cfg)
+  return before - cfg.relays.length
+}
+
+export async function importPeerInvite (input) {
+  let payload = input
+  if (typeof input === 'string') {
+    try {
+      payload = JSON.parse(input)
+    } catch {
+      const raw = await fs.readFile(input, 'utf8')
+      payload = JSON.parse(raw)
+    }
+  }
+
+  const card = payload.agentchat ?? payload
+  const peerId = card.peer_id ?? card.peerId
+  const name = card.name ?? card.alias
+  const addrs = [
+    ...(card.multiaddr != null ? [card.multiaddr] : []),
+    ...(card.multiaddrs ?? []),
+    ...(card.direct_addresses ?? []),
+    ...(card.relay_addresses ?? [])
+  ].filter(Boolean)
+
+  if (peerId == null || name == null) {
+    throw new Error('Invite must include peer_id and name.')
+  }
+
+  let peer
+  if (addrs.length === 0) {
+    peer = await addPeer(peerId, name)
+  } else {
+    for (const addr of addrs) {
+      peer = await addPeer(peerId, name, addr)
+    }
+  }
+  return peer
 }
 
 export async function loadPeers () {

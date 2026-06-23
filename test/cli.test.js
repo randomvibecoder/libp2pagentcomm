@@ -85,6 +85,33 @@ test('peer add, list, and rm manage friendly aliases', async () => {
   assert.equal(removed.body.removed, 1)
 })
 
+test('relay add, invite, and peer import manage contact cards', async () => {
+  const a = await tmpAgent('invite-a')
+  const b = await tmpAgent('invite-b')
+  await runJson(a, ['init'])
+  await runJson(b, ['init'])
+
+  const relayAddr = '/ip4/127.0.0.1/tcp/9998/ws/p2p/12D3KooWKH1ZRuCPiKBEstLVrEZhZTu6JhEvVMKE6sLVmypfpkAz'
+  const relay = await runJson(a, ['relay', 'add', relayAddr])
+  assert.deepEqual(relay.body.relays, [relayAddr])
+
+  const invite = await runJson(a, ['invite', 'alice'])
+  assert.equal(invite.body.agentchat.name, 'alice')
+  assert.equal(invite.body.agentchat.configured_relays[0], relayAddr)
+
+  const imported = await runJson(b, ['peer', 'import', JSON.stringify({
+    agentchat: {
+      peer_id: invite.body.agentchat.peer_id,
+      name: 'alice',
+      multiaddrs: ['/ip4/127.0.0.1/tcp/9999/ws']
+    }
+  })])
+  assert.equal(imported.body.peer.name, 'alice')
+
+  const listed = await runJson(b, ['peer', 'list'])
+  assert.equal(listed.body.peers[0].name, 'alice')
+})
+
 test('message rejects bodies over 1000 UTF-8 bytes before dialing', async () => {
   const a = await tmpAgent('limit-a')
   const b = await tmpAgent('limit-b')
@@ -123,5 +150,55 @@ test('two local agents can send and persist a DM over WebSockets', async () => {
     assert.equal(inbox.body.messages[0].from, sent.body.message.from)
   } finally {
     server.kill('SIGTERM')
+  }
+})
+
+test('two local agents can send and persist a DM over circuit relay', async () => {
+  const relay = await tmpAgent('relay')
+  const listener = await tmpAgent('relay-listener')
+  const sender = await tmpAgent('relay-sender')
+  const relayInit = await runJson(relay, ['init'])
+  const listenerInit = await runJson(listener, ['init'])
+  await runJson(sender, ['init'])
+
+  const relayServer = spawn(process.execPath, [cli, 'relay', '--listen', '/ip4/127.0.0.1/tcp/0/ws'], {
+    env: relay.env
+  })
+  const listenerServer = spawn(process.execPath, [cli, 'serve', '--listen', '/ip4/127.0.0.1/tcp/0/ws'], {
+    env: listener.env
+  })
+  let listenerWithRelay
+
+  try {
+    const relayStarted = await waitForServeJson(relayServer)
+    assert.equal(relayStarted.peer_id, relayInit.body.peer_id)
+    const relayAddr = relayStarted.addresses[0]
+
+    await runJson(listener, ['relay', 'add', relayAddr])
+    listenerServer.kill('SIGTERM')
+    await new Promise(resolve => listenerServer.once('close', resolve))
+
+    listenerWithRelay = spawn(process.execPath, [cli, 'serve', '--listen', '/ip4/127.0.0.1/tcp/0/ws'], {
+      env: listener.env
+    })
+    const started = await waitForServeJson(listenerWithRelay)
+    const relayed = started.addresses.find(addr => addr.includes('/p2p-circuit/') && !addr.includes('/webrtc'))
+    assert.ok(relayed)
+
+    await runJson(sender, ['peer', 'add', listenerInit.body.peer_id, 'bob', relayed])
+    const sent = await runJson(sender, ['message', 'bob', 'hello relay'])
+    assert.equal(sent.body.message.body, 'hello relay')
+    assert.match(sent.body.dialed, /p2p-circuit/)
+
+    await new Promise(resolve => setTimeout(resolve, 500))
+    const inbox = await runJson(listener, ['inbox'])
+    assert.equal(inbox.body.messages.length, 1)
+    assert.equal(inbox.body.messages[0].body, 'hello relay')
+
+    listenerWithRelay.kill('SIGTERM')
+  } finally {
+    relayServer.kill('SIGTERM')
+    listenerServer.kill('SIGTERM')
+    listenerWithRelay?.kill('SIGTERM')
   }
 })
