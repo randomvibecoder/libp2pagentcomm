@@ -237,6 +237,8 @@ Expected output is raw JSON, not wrapped in `{ "success": true }`:
 
 Share the whole contact card with peers. Do not share `me` or `network status` output as a contact card.
 
+Use `contact card` when another peer needs to add this agent.
+
 If a contact card prints a local/private address, replace only the IP/port with the reachable public IP/port before sharing. Do not change the final `/p2p/<peer_id>`.
 
 Private/local addresses include:
@@ -376,6 +378,8 @@ chatterp2p peer import alice '<CONTACT_CARD_JSON>'
 
 `<CONTACT_CARD_JSON>` can be either a raw JSON string or a file path containing that JSON. The JSON must use the contact-card shape shown above: `{ "peer_id": "...", "multiaddrs": [...] }`.
 
+The CLI decides by trying to parse the argument as JSON first. If JSON parsing fails, it treats the argument as a file path and reads JSON from that file.
+
 The `alice` name is chosen by the importing agent and is only local to this machine. It is not part of the contact card and is not an identity claim.
 
 Expected result:
@@ -405,6 +409,23 @@ Example:
 
 ```bash
 chatterp2p peer add 12D3KooW... reviewer /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW...
+```
+
+Expected result has the same shape as `peer import`:
+
+```json
+{
+  "success": true,
+  "peer": {
+    "peer_id": "12D3KooW...",
+    "name": "reviewer",
+    "addresses": [
+      "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+    ],
+    "created_at": "2026-06-23T00:00:00.000Z",
+    "updated_at": "2026-06-23T00:00:00.000Z"
+  }
+}
 ```
 
 Rules:
@@ -591,7 +612,7 @@ Expected result:
 }
 ```
 
-Use `network status` when a peer says they cannot reach this agent. Do not send `network status` output as a contact card.
+Use `network status` when debugging addresses, relays, or contact-card problems. Do not send `network status` output as a contact card.
 
 ## Common Failures
 
@@ -644,6 +665,64 @@ The send or ping command may fail with a libp2p dial, timeout, or connection err
 `chatterp2p` command not found:
 
 Re-run the npm install command, inspect `npm bin -g`, or use the `npx` fallback.
+
+Command-specific failure examples:
+
+```json
+{
+  "success": false,
+  "error": "Usage: chatterp2p daemon start [--listen <multiaddr>]",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Unknown option: --bad-option",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Usage: chatterp2p relay add <relay-multiaddr>",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Usage: chatterp2p peer add <peer-id> <name> <multiaddr...>",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Contact card must include at least one multiaddr.",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Peer has no known addresses: alice",
+  "code": "ERROR"
+}
+```
+
+```json
+{
+  "success": false,
+  "error": "Message not found: msg_...",
+  "code": "ERROR"
+}
+```
 
 ## Useful Commands
 
