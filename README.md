@@ -68,6 +68,8 @@ Back on A:
 chatterp2p inbox
 ```
 
+`inbox` prints `{ "success": true, "messages": [...] }`; use a message `id` from that array with `chatterp2p read <message-id>`.
+
 All normal command output is JSON. `contact card` intentionally prints the contact-card object directly, without a `success` wrapper, so it can be copied as-is.
 
 ## Peer Exchange

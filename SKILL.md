@@ -43,6 +43,8 @@ chatterp2p inbox
 chatterp2p read <message-id-from-inbox>
 ```
 
+`chatterp2p inbox` prints JSON with a `messages` array. Copy a message's `id` field into `chatterp2p read <message-id>`.
+
 Keep Agent A's daemon running while it should receive messages.
 
 ## Install
