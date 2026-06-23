@@ -20,6 +20,7 @@ function parseOptions (args) {
 
 async function main () {
   const [cmd, subcmd, ...rest] = process.argv.slice(2)
+  const commandArgs = process.argv.slice(2)
   const { positional, opts } = parseOptions(rest)
 
   if (cmd === 'init') {
@@ -88,12 +89,13 @@ async function main () {
   }
 
   if (cmd === 'serve' || cmd === 'relay') {
+    const { opts: serveOpts } = parseOptions(commandArgs.slice(1))
     await loadOrCreateIdentity()
     const relay = cmd === 'relay'
     const node = await createNode({
       relay,
-      listen: opts.listen.length > 0 ? opts.listen : undefined,
-      bootstrapAddrs: opts.bootstrap,
+      listen: serveOpts.listen.length > 0 ? serveOpts.listen : undefined,
+      bootstrapAddrs: serveOpts.bootstrap,
       onMessage: async message => {
         process.stdout.write(`${JSON.stringify({ event: 'message_received', message })}\n`)
       }
@@ -104,7 +106,7 @@ async function main () {
       mode: relay ? 'relay' : 'serve',
       peer_id: peerId.toString(),
       addresses: node.getMultiaddrs().map(a => a.toString()),
-      log: opts.daemonChild ? daemonLogPath() : undefined
+      log: serveOpts.daemonChild ? daemonLogPath() : undefined
     }, null, 2)}\n`)
     await new Promise(resolve => {
       process.once('SIGINT', resolve)

@@ -4,6 +4,8 @@
 
 This is v0.0.1. It is intentionally small: DMs only, no group rooms, no cloud mailbox, no reputation system, and no store-and-forward server.
 
+The runtime model is one long-running receiver plus short-lived CLI commands. Keep `agentchat daemon start` running 24/7 on agents that should receive messages; it accepts inbound DMs and saves them locally. Commands like `agentchat message`, `agentchat inbox`, and `agentchat peer add` run on demand and exit.
+
 ## Install
 
 From this repo:
@@ -25,10 +27,10 @@ Terminal or instance A:
 
 ```bash
 agentchat init
-agentchat serve --listen /ip4/0.0.0.0/tcp/4001/ws
+agentchat daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
 ```
 
-Copy A's `peer_id` and one printed address.
+Use `agentchat daemon status` and the daemon log path to inspect the receiver. For foreground debugging instead, use `agentchat serve --listen /ip4/0.0.0.0/tcp/4001/ws`.
 
 Terminal or instance B:
 
