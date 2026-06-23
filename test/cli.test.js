@@ -102,6 +102,20 @@ test('init is idempotent and returns a Peer ID', async () => {
   assert.equal(first.body.peer_id, second.body.peer_id)
 })
 
+test('help and version do not initialize identity', async () => {
+  const agent = await tmpAgent('help')
+  const help = await runCli(agent, ['--help'])
+  const version = await runCli(agent, ['--version'])
+
+  assert.equal(help.code, 0)
+  assert.match(help.stdout, /Usage:/)
+  assert.match(help.stdout, /chatterp2p --version/)
+  assert.match(help.stdout, /chatterp2p contact card/)
+  assert.equal(version.code, 0)
+  assert.match(version.stdout, /^0\.0\.1\n$/)
+  await assert.rejects(fs.access(path.join(agent.env.CHATTERP2P_CONFIG_DIR, 'identity.json')))
+})
+
 test('peer add, list, and rm manage friendly aliases', async () => {
   const a = await tmpAgent('peer-a')
   const b = await tmpAgent('peer-b')

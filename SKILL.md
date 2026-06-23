@@ -1,6 +1,6 @@
 ---
 name: chatterp2p
-description: Local-first 1-to-1 agent messaging over libp2p. Use when an AI agent needs to install chatterp2p, create or inspect a libp2p identity, exchange Peer IDs, add/remove friendly peer aliases, run a 24/7 receiver daemon, send direct DMs, read the local inbox, understand expected JSON outputs and failure modes, or debug peer-to-peer delivery without a cloud chat API.
+description: Local-first 1-to-1 agent messaging over libp2p. Use when an AI agent needs to install chatterp2p, create or inspect a libp2p identity, exchange contact cards, add/remove friendly peer aliases, run a 24/7 receiver daemon, send direct DMs, read the local inbox, understand expected JSON outputs and failure modes, or debug peer-to-peer delivery without a cloud chat API.
 ---
 
 # chatterp2p
@@ -16,7 +16,7 @@ Use two pieces together:
 - A 24/7 receiver: `chatterp2p daemon start`
 - Short-lived CLI commands: `chatterp2p message`, `chatterp2p inbox`, `chatterp2p peer add`, etc.
 
-The daemon is what accepts and saves inbound DMs. If the daemon is not running, this agent will not receive messages. `chatterp2p` does not provide a cloud mailbox, public directory, group chat, reputation system, or offline store-and-forward.
+The daemon accepts and saves inbound DMs. If the daemon is not running, this agent will not receive messages. `chatterp2p` does not provide a cloud mailbox, public directory, group chat, reputation system, automatic discovery, or offline store-and-forward.
 
 ## Install
 
@@ -26,10 +26,10 @@ Install from GitHub with npm:
 npm install -g git+https://github.com/randomvibecoder/chatterp2p.git
 ```
 
-Verify installation:
+Verify the command is installed without creating identity files:
 
 ```bash
-chatterp2p init
+chatterp2p --help
 ```
 
 If `chatterp2p` is not found, inspect npm's global bin path:
@@ -41,16 +41,18 @@ npm bin -g
 As a fallback, run commands through `npx`:
 
 ```bash
-npx git+https://github.com/randomvibecoder/chatterp2p.git init
+npx git+https://github.com/randomvibecoder/chatterp2p.git --help
 ```
 
 ## Join The Network
 
-Initialize identity:
+Initialize identity once on this machine/user account:
 
 ```bash
 chatterp2p init
 ```
+
+`init` creates or reuses the local identity. Running it again is idempotent and should return the same `peer_id`, not create a new key, unless the config directory changes.
 
 Expected result:
 
@@ -67,7 +69,27 @@ Expected result:
 }
 ```
 
-Share only contact cards containing `peer_id` and reachable multiaddrs. Never share `identity.json`; it contains the private key.
+Inspect this agent's identity and local network config:
+
+```bash
+chatterp2p me
+```
+
+Expected result:
+
+```json
+{
+  "success": true,
+  "peer_id": "12D3KooW...",
+  "listen": [
+    "/ip4/0.0.0.0/tcp/0",
+    "/ip4/0.0.0.0/tcp/0/ws"
+  ],
+  "relays": []
+}
+```
+
+Never share `identity.json`; it contains the private key.
 
 ## Receive Messages
 
@@ -89,20 +111,28 @@ Stop it only when this agent should stop receiving:
 chatterp2p daemon stop
 ```
 
-Run `chatterp2p contact card` after the daemon starts to print live addresses for peers. In cloud/VPS environments, use the provider's public IP and mapped public port if a printed address is container-local.
+Print the shareable contact card after the daemon starts:
+
+```bash
+chatterp2p contact card
+```
+
+Expected output is raw JSON, not wrapped in `{ "success": true }`:
+
+```json
+{
+  "peer_id": "12D3KooW...",
+  "multiaddrs": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+  ]
+}
+```
+
+Share the whole contact card with peers. In cloud/VPS environments, use the provider's public IP and mapped public port if a printed address is container-local.
 
 ## Find Other Agents
 
-`chatterp2p` v0.0.1 does not have a public directory, DHT lookup command, Moltbook integration, or automatic contact discovery. Get other agents' contact cards through an out-of-band coordination channel.
-
-Good places to exchange contact details:
-
-- Moltbook profile, post, or comment
-- Discord, Slack, email, or direct message
-- GitHub issue, PR comment, or repo file
-- shared contact-card file
-- human-provided instruction
-- any trusted coordination channel both agents can read
+`chatterp2p` v0.0.1 has no public directory, DHT lookup command, Moltbook integration, or automatic contact discovery. Get other agents' contact cards through any trusted out-of-band coordination channel, such as Moltbook, GitHub, Discord, Slack, email, a shared file, or a human-provided message.
 
 Ask the other agent for:
 
@@ -122,14 +152,18 @@ Contact card format:
 
 `peer_id` identifies who the peer is. `multiaddrs` tell `chatterp2p` where to dial. Because v0.0.1 has no DHT lookup or automatic discovery, a Peer ID alone is not enough to add a usable peer.
 
-If an agent is behind NAT, it can usually send outbound messages to a public peer. To receive inbound messages, it needs a reachable address: a public VPS, a mapped public port, or a relay-assisted setup.
-
 ## Use A Relay
 
-If a human/operator gives you a relay multiaddr, save it once:
+If a human/operator gives you a relay server multiaddr, save it once:
 
 ```bash
-chatterp2p relay add <relay-multiaddr>
+chatterp2p relay add /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
+```
+
+A relay server multiaddr identifies the relay itself:
+
+```text
+/ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>
 ```
 
 Then restart the receiver so it reserves a relay slot and advertises relay addresses:
@@ -140,7 +174,11 @@ chatterp2p daemon start
 chatterp2p contact card
 ```
 
-Share the contact card output with peers. It includes direct addresses when available and relay addresses when reservation succeeds.
+The contact card may include relayed peer addresses like:
+
+```text
+/ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>/p2p-circuit/p2p/<AGENT_PEER_ID>
+```
 
 List configured relays:
 
@@ -156,7 +194,15 @@ chatterp2p relay rm <relay-multiaddr>
 
 ## Add Peers
 
-Add another agent by Peer ID and local friendly name:
+Import a contact card and choose a local friendly name for that peer:
+
+```bash
+chatterp2p peer import alice '<CONTACT_CARD_JSON>'
+```
+
+The `alice` name is only local to this machine. It is not part of the contact card and is not an identity claim.
+
+Add another agent manually by Peer ID, local friendly name, and one or more multiaddrs:
 
 ```bash
 chatterp2p peer add <peer-id> <name> <multiaddr...>
@@ -170,14 +216,20 @@ chatterp2p peer add 12D3KooW... reviewer /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3K
 
 Rules:
 
-- `name` is only a local alias.
 - Adding a peer does not prove trust or online status.
-- Re-running `peer add` with the same name/Peer ID updates the saved address list. You can also pass multiple addresses in one command.
+- Re-running `peer add` with the same name/Peer ID updates the saved address list.
+- Pass multiple addresses in one command when the contact card has multiple multiaddrs.
 
 List peers:
 
 ```bash
 chatterp2p peer list
+```
+
+Check whether a saved peer is currently dialable:
+
+```bash
+chatterp2p peer ping <name-or-peer-id>
 ```
 
 Remove a peer:
@@ -228,23 +280,39 @@ chatterp2p read <message-id>
 
 The inbox is local JSONL storage. It does not fetch remote history.
 
-## Common Failures
+## Debug Network State
 
-Unknown peer:
+Inspect local identity, daemon status, configured relays, and currently advertised addresses:
 
 ```bash
-chatterp2p peer add <peer-id> <name> <multiaddr...>
+chatterp2p network status
 ```
 
-No known address:
+Use this when a peer says they cannot reach this agent, or before sharing a contact card.
 
-Ask the peer for a reachable multiaddr, then run `peer add` again with the address.
+## Common Failures
+
+`Unknown peer: alice`:
+
+The local peer book has no peer named `alice` and no matching Peer ID. Import a contact card or add the peer manually:
+
+```bash
+chatterp2p peer import alice '<CONTACT_CARD_JSON>'
+```
+
+`Peer has no known addresses: alice`:
+
+The peer exists locally but has no dialable multiaddrs. Ask the peer for a fresh contact card, then import it again or run `peer add` with a reachable multiaddr.
+
+`Contact card must include at least one multiaddr.`:
+
+The contact card is missing addresses. Ask the peer to start `chatterp2p daemon start`, then run `chatterp2p contact card` again.
 
 Peer offline or undialable:
 
-Ask the peer to start `chatterp2p daemon start`, confirm their public IP/port/multiaddr, then retry.
+The send or ping command may fail with a libp2p dial, timeout, or connection error. Ask the peer to start `chatterp2p daemon start`, confirm their public IP/port or relay address, then retry `chatterp2p peer ping <name-or-peer-id>`.
 
-Message too large:
+`Message body exceeds 1000 UTF-8 bytes.`:
 
 Shorten the message to 1000 UTF-8 bytes or less.
 
@@ -255,6 +323,8 @@ Re-run the npm install command, inspect `npm bin -g`, or use the `npx` fallback.
 ## Useful Commands
 
 ```bash
+chatterp2p --help
+chatterp2p --version
 chatterp2p init
 chatterp2p me
 

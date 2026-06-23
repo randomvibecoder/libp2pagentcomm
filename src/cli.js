@@ -1,12 +1,50 @@
 #!/usr/bin/env node
+import { createRequire } from 'node:module'
 import { daemonStatus, readDaemonInfo, startDaemon, stopDaemon } from './daemon.js'
 import { configPath, identityPath, messagesPath, peersPath } from './paths.js'
 import { pingPeer, sendMessage } from './p2p.js'
 import { addPeer, addRelay, findPeer, importPeerContact, listMessages, loadConfig, loadIdentity, loadOrCreateIdentity, loadPeers, removePeer, removeRelay } from './storage.js'
 import { fail, ok } from './output.js'
 
+const require = createRequire(import.meta.url)
+const pkg = require('../package.json')
+
+const usage = `chatterp2p ${pkg.version}
+
+Usage:
+  chatterp2p --help
+  chatterp2p --version
+  chatterp2p init
+  chatterp2p me
+  chatterp2p contact card
+  chatterp2p peer add <peer-id> <name> <multiaddr...>
+  chatterp2p peer import <name> <json-or-file>
+  chatterp2p peer list
+  chatterp2p peer ping <name-or-peer-id>
+  chatterp2p peer rm <name-or-peer-id>
+  chatterp2p message <name-or-peer-id> <message>
+  chatterp2p inbox
+  chatterp2p read <message-id>
+  chatterp2p daemon start [--listen <multiaddr>]
+  chatterp2p daemon status
+  chatterp2p daemon stop
+  chatterp2p relay add <relay-multiaddr>
+  chatterp2p relay list
+  chatterp2p relay rm <relay-multiaddr>
+  chatterp2p network status`
+
 async function main () {
   const [cmd, subcmd, ...rest] = process.argv.slice(2)
+
+  if (cmd === '--help' || cmd === '-h' || cmd == null) {
+    process.stdout.write(`${usage}\n`)
+    return
+  }
+
+  if (cmd === '--version' || cmd === '-v') {
+    process.stdout.write(`${pkg.version}\n`)
+    return
+  }
 
   if (cmd === 'init') {
     const { peerId } = await loadOrCreateIdentity()
