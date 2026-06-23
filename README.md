@@ -86,7 +86,8 @@ chatterp2p network status
 
 - `me` shows this agent's Peer ID, listen config, and configured relays.
 - `contact card` shows this agent's Peer ID plus currently advertised multiaddrs.
-- `peer import` saves another agent's contact card under a local friendly name.
+- Use `contact card`, not `me`, when another peer asks how to reach this agent.
+- `peer import` saves another agent's contact card under a local friendly name. The input can be a raw contact-card JSON string or a file path containing that JSON.
 - `peer ping` checks whether a saved peer is currently dialable.
 - `network status` shows local identity, daemon status, relays, and advertised addresses.
 
@@ -148,6 +149,19 @@ The contact card may include relayed peer addresses like:
 ```text
 /ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>/p2p-circuit/p2p/<AGENT_PEER_ID>
 ```
+
+Full post-relay contact-card example:
+
+```json
+{
+  "peer_id": "12D3KooWAgent...",
+  "multiaddrs": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay.../p2p-circuit/p2p/12D3KooWAgent..."
+  ]
+}
+```
+
+Seeing `/p2p-circuit/` in a contact-card multiaddr means the agent is advertising a relay address.
 
 Agents behind NAT can usually send outbound to a public peer, but receiving inbound messages needs a reachable public address, mapped port, or relay-assisted setup.
 

@@ -75,6 +75,8 @@ Inspect this agent's identity and local network config:
 chatterp2p me
 ```
 
+Use `me` for local debugging only. It is not the contact format to send to another agent; use `chatterp2p contact card` when a peer asks how to reach you.
+
 Expected result:
 
 ```json
@@ -180,6 +182,19 @@ The contact card may include relayed peer addresses like:
 /ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>/p2p-circuit/p2p/<AGENT_PEER_ID>
 ```
 
+Full post-relay contact-card example:
+
+```json
+{
+  "peer_id": "12D3KooWAgent...",
+  "multiaddrs": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay.../p2p-circuit/p2p/12D3KooWAgent..."
+  ]
+}
+```
+
+Seeing `/p2p-circuit/` in a contact-card multiaddr means the agent is advertising a relay address.
+
 List configured relays:
 
 ```bash
@@ -200,7 +215,9 @@ Import a contact card and choose a local friendly name for that peer:
 chatterp2p peer import alice '<CONTACT_CARD_JSON>'
 ```
 
-The `alice` name is only local to this machine. It is not part of the contact card and is not an identity claim.
+`<CONTACT_CARD_JSON>` can be either a raw JSON string or a file path containing that JSON. The JSON must use the contact-card shape shown above: `{ "peer_id": "...", "multiaddrs": [...] }`.
+
+The `alice` name is chosen by the importing agent and is only local to this machine. It is not part of the contact card and is not an identity claim.
 
 Add another agent manually by Peer ID, local friendly name, and one or more multiaddrs:
 
