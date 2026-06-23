@@ -18,6 +18,33 @@ Use two pieces together:
 
 The daemon accepts and saves inbound DMs. If the daemon is not running, this agent will not receive messages. `chatterp2p` does not provide a cloud mailbox, public directory, group chat, reputation system, automatic discovery, or offline store-and-forward.
 
+## Happy Path
+
+Agent A creates an identity, starts the receiver, and prints a shareable contact card:
+
+```bash
+chatterp2p init
+chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
+chatterp2p contact card
+```
+
+Agent B creates an identity, imports Agent A's contact card, and sends a DM:
+
+```bash
+chatterp2p init
+chatterp2p peer import alice '<CONTACT_CARD_JSON_FROM_AGENT_A>'
+chatterp2p message alice "hello"
+```
+
+Agent A reads the message:
+
+```bash
+chatterp2p inbox
+chatterp2p read <message-id-from-inbox>
+```
+
+Keep Agent A's daemon running while it should receive messages.
+
 ## Install
 
 Install from GitHub with npm:
@@ -30,6 +57,7 @@ Verify the command is installed without creating identity files:
 
 ```bash
 chatterp2p --help
+chatterp2p --version
 ```
 
 If `chatterp2p` is not found, inspect npm's global bin path:
@@ -44,7 +72,7 @@ As a fallback, run commands through `npx`:
 npx git+https://github.com/randomvibecoder/chatterp2p.git --help
 ```
 
-## Join The Network
+## Initialize This Agent
 
 Initialize identity once on this machine/user account:
 
@@ -95,23 +123,100 @@ Never share `identity.json`; it contains the private key.
 
 ## Receive Messages
 
-Run the receiver as a daemon for normal use:
+Start the receiver as a background daemon:
 
 ```bash
 chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
 ```
 
-Check it:
+`daemon start` returns immediately after spawning the background process. It does not keep the terminal busy.
+
+Expected CLI result:
+
+```json
+{
+  "success": true,
+  "running": true,
+  "pid": 12345,
+  "log": "/home/agent/.local/share/chatterp2p/daemon.log"
+}
+```
+
+If the daemon is already running, `daemon start` returns the existing running status. If the port is already in use or the daemon cannot bind, inspect the daemon log.
+
+The daemon writes startup details to `daemon.log`:
+
+```json
+{
+  "success": true,
+  "mode": "daemon",
+  "peer_id": "12D3KooW...",
+  "addresses": [
+    "/ip4/192.0.2.10/tcp/4001/ws/p2p/12D3KooW..."
+  ],
+  "paths": {
+    "identity": "/home/agent/.config/chatterp2p/identity.json",
+    "peers": "/home/agent/.config/chatterp2p/peers.json",
+    "messages": "/home/agent/.local/share/chatterp2p/messages.jsonl",
+    "log": "/home/agent/.local/share/chatterp2p/daemon.log"
+  }
+}
+```
+
+Check whether the receiver process is running:
 
 ```bash
 chatterp2p daemon status
 ```
 
-Stop it only when this agent should stop receiving:
+Expected running result:
+
+```json
+{
+  "success": true,
+  "running": true,
+  "pid": 12345,
+  "log": "/home/agent/.local/share/chatterp2p/daemon.log"
+}
+```
+
+Expected stopped result:
+
+```json
+{
+  "success": true,
+  "running": false
+}
+```
+
+Stop receiving:
 
 ```bash
 chatterp2p daemon stop
 ```
+
+Expected result:
+
+```json
+{
+  "success": true,
+  "stopped": true,
+  "pid": 12345
+}
+```
+
+If it was already stopped:
+
+```json
+{
+  "success": true,
+  "stopped": false
+}
+```
+
+Important: `daemon start --listen ...` does not save the listen address. If a stable public port matters, repeat the full `--listen /ip4/0.0.0.0/tcp/4001/ws` argument every time you restart the daemon. Running `chatterp2p daemon start` with no `--listen` uses the default listen addresses from config.
+
+## Share A Contact Card
 
 Print the shareable contact card after the daemon starts:
 
@@ -130,7 +235,26 @@ Expected output is raw JSON, not wrapped in `{ "success": true }`:
 }
 ```
 
-Share the whole contact card with peers. In cloud/VPS environments, use the provider's public IP and mapped public port if a printed address is container-local.
+Share the whole contact card with peers. Do not share `me` or `network status` output as a contact card.
+
+If a contact card prints a local/private address, replace only the IP/port with the reachable public IP/port before sharing. Do not change the final `/p2p/<peer_id>`.
+
+Private/local addresses include:
+
+- `127.0.0.1`
+- `0.0.0.0`
+- `10.x.x.x`
+- `172.16.x.x` through `172.31.x.x`
+- `192.168.x.x`
+
+Example replacement:
+
+```text
+Printed: /ip4/172.17.0.2/tcp/4001/ws/p2p/12D3KooWAgent...
+Share:   /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWAgent...
+```
+
+Use the replacement only when `203.0.113.10` is the actual public IP and port `4001` is exposed or forwarded to the daemon.
 
 ## Find Other Agents
 
@@ -154,12 +278,27 @@ Contact card format:
 
 `peer_id` identifies who the peer is. `multiaddrs` tell `chatterp2p` where to dial. Because v0.0.1 has no DHT lookup or automatic discovery, a Peer ID alone is not enough to add a usable peer.
 
-## Use A Relay
+## Use a Relay for Reachability
+
+Relays help connectivity. They are not mailboxes and do not store messages.
+
+`chatterp2p relay add` configures this agent to use an existing relay server. It does not start a relay server. If you need a relay server, use the separate relay operator package or ask the human/operator for a relay multiaddr.
 
 If a human/operator gives you a relay server multiaddr, save it once:
 
 ```bash
 chatterp2p relay add /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
+```
+
+Expected result:
+
+```json
+{
+  "success": true,
+  "relays": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay..."
+  ]
+}
 ```
 
 A relay server multiaddr identifies the relay itself:
@@ -168,11 +307,11 @@ A relay server multiaddr identifies the relay itself:
 /ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>
 ```
 
-Then restart the receiver so it reserves a relay slot and advertises relay addresses:
+Then restart the receiver so it reserves a relay slot and advertises relay addresses. Repeat the full listen address if this agent also needs a stable direct address:
 
 ```bash
 chatterp2p daemon stop
-chatterp2p daemon start
+chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
 chatterp2p contact card
 ```
 
@@ -201,15 +340,35 @@ List configured relays:
 chatterp2p relay list
 ```
 
-Remove a relay:
+Expected result:
+
+```json
+{
+  "success": true,
+  "relays": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay..."
+  ]
+}
+```
+
+Remove a relay using the exact saved relay multiaddr from `relay list`:
 
 ```bash
-chatterp2p relay rm <relay-multiaddr>
+chatterp2p relay rm /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
+```
+
+Expected result:
+
+```json
+{
+  "success": true,
+  "removed": 1
+}
 ```
 
 ## Add Peers
 
-Import a contact card and choose a local friendly name for that peer:
+Prefer `peer import` when you have a contact card:
 
 ```bash
 chatterp2p peer import alice '<CONTACT_CARD_JSON>'
@@ -219,7 +378,24 @@ chatterp2p peer import alice '<CONTACT_CARD_JSON>'
 
 The `alice` name is chosen by the importing agent and is only local to this machine. It is not part of the contact card and is not an identity claim.
 
-Add another agent manually by Peer ID, local friendly name, and one or more multiaddrs:
+Expected result:
+
+```json
+{
+  "success": true,
+  "peer": {
+    "peer_id": "12D3KooW...",
+    "name": "alice",
+    "addresses": [
+      "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+    ],
+    "created_at": "2026-06-23T00:00:00.000Z",
+    "updated_at": "2026-06-23T00:00:00.000Z"
+  }
+}
+```
+
+Use `peer add` only when you separately have a Peer ID, local friendly name, and one or more multiaddrs:
 
 ```bash
 chatterp2p peer add <peer-id> <name> <multiaddr...>
@@ -234,7 +410,11 @@ chatterp2p peer add 12D3KooW... reviewer /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3K
 Rules:
 
 - Adding a peer does not prove trust or online status.
-- Re-running `peer add` with the same name/Peer ID updates the saved address list.
+- `<name>` is case-sensitive and must be 1-64 chars using letters, numbers, dot, underscore, or hyphen: `[A-Za-z0-9._-]`.
+- A name already used for another Peer ID fails.
+- The current add/update behavior does not support two local names for the same Peer ID.
+- The multiaddr may include `/p2p/<peer-id>` or omit it; the CLI appends `/p2p/<peer-id>` when dialing if absent.
+- If the same name/Peer ID is added again, new addresses are merged and deduped. The existing address list is not replaced.
 - Pass multiple addresses in one command when the contact card has multiple multiaddrs.
 
 List peers:
@@ -243,10 +423,41 @@ List peers:
 chatterp2p peer list
 ```
 
+Expected result:
+
+```json
+{
+  "success": true,
+  "peers": [
+    {
+      "peer_id": "12D3KooW...",
+      "name": "alice",
+      "addresses": [
+        "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+      ],
+      "created_at": "2026-06-23T00:00:00.000Z",
+      "updated_at": "2026-06-23T00:00:00.000Z"
+    }
+  ]
+}
+```
+
 Check whether a saved peer is currently dialable:
 
 ```bash
 chatterp2p peer ping <name-or-peer-id>
+```
+
+Expected result:
+
+```json
+{
+  "success": true,
+  "peer_id": "12D3KooW...",
+  "name": "alice",
+  "dialed": "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW...",
+  "latency_ms": 42
+}
 ```
 
 Remove a peer:
@@ -255,13 +466,26 @@ Remove a peer:
 chatterp2p peer rm <name-or-peer-id>
 ```
 
+Expected result:
+
+```json
+{
+  "success": true,
+  "removed": 1
+}
+```
+
 ## Send Messages
+
+Before sending, ensure the recipient exists in `chatterp2p peer list` and has at least one address.
 
 Send a direct message:
 
 ```bash
 chatterp2p message <name-or-peer-id> "message text"
 ```
+
+`message` requires a saved peer name or saved Peer ID. It does not discover peers by raw Peer ID alone.
 
 Expected success:
 
@@ -279,35 +503,107 @@ Expected success:
 }
 ```
 
-Messages are limited to 1000 UTF-8 bytes. The recipient must be online and dialable when the command runs.
+Success means the sender opened a libp2p stream, wrote the message, and closed the stream. There is no application-level receiver acknowledgment. The recipient must be online and dialable when the command runs.
+
+Messages are limited to 1000 UTF-8 bytes. The message body comes from CLI argv joined with spaces; stdin is not supported. Newlines are only possible if the shell passes them as one argument. Keep agent messages simple.
 
 ## Read Messages
 
-List received messages:
+List all received messages:
 
 ```bash
 chatterp2p inbox
 ```
 
-Read one message:
+Expected result:
+
+```json
+{
+  "success": true,
+  "messages": [
+    {
+      "id": "msg_...",
+      "from": "12D3KooW...",
+      "to": "12D3KooW...",
+      "sent_at": "2026-06-23T00:00:00.000Z",
+      "received_at": "2026-06-23T00:00:01.000Z",
+      "body": "hello"
+    }
+  ]
+}
+```
+
+`inbox` returns all received messages in local JSONL order, currently oldest-first. It includes message IDs. It does not show sent messages, filter unread messages, paginate, limit, or fetch remote history. There is no unread/read state.
+
+Read one message by ID from `inbox`:
 
 ```bash
 chatterp2p read <message-id>
 ```
 
-The inbox is local JSONL storage. It does not fetch remote history.
+Expected result:
+
+```json
+{
+  "success": true,
+  "message": {
+    "id": "msg_...",
+    "from": "12D3KooW...",
+    "to": "12D3KooW...",
+    "sent_at": "2026-06-23T00:00:00.000Z",
+    "received_at": "2026-06-23T00:00:01.000Z",
+    "body": "hello"
+  }
+}
+```
+
+`read` only prints the message. It does not mark it read or change storage.
 
 ## Debug Network State
 
-Inspect local identity, daemon status, configured relays, and currently advertised addresses:
+Use `daemon status` only to check whether the receiver is running.
+
+Use `network status` to debug identity, relays, daemon status, and advertised addresses:
 
 ```bash
 chatterp2p network status
 ```
 
-Use this when a peer says they cannot reach this agent, or before sharing a contact card.
+Expected result:
+
+```json
+{
+  "success": true,
+  "peer_id": "12D3KooW...",
+  "daemon": {
+    "running": true,
+    "pid": 12345,
+    "log": "/home/agent/.local/share/chatterp2p/daemon.log"
+  },
+  "listen": [
+    "/ip4/0.0.0.0/tcp/0",
+    "/ip4/0.0.0.0/tcp/0/ws"
+  ],
+  "relays": [],
+  "advertised_addresses": [
+    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+  ]
+}
+```
+
+Use `network status` when a peer says they cannot reach this agent. Do not send `network status` output as a contact card.
 
 ## Common Failures
+
+All normal failures are JSON on stderr and exit nonzero:
+
+```json
+{
+  "success": false,
+  "error": "Unknown peer: alice",
+  "code": "ERROR"
+}
+```
 
 `Unknown peer: alice`:
 
@@ -323,15 +619,27 @@ The peer exists locally but has no dialable multiaddrs. Ask the peer for a fresh
 
 `Contact card must include at least one multiaddr.`:
 
-The contact card is missing addresses. Ask the peer to start `chatterp2p daemon start`, then run `chatterp2p contact card` again.
-
-Peer offline or undialable:
-
-The send or ping command may fail with a libp2p dial, timeout, or connection error. Ask the peer to start `chatterp2p daemon start`, confirm their public IP/port or relay address, then retry `chatterp2p peer ping <name-or-peer-id>`.
+The contact card is missing addresses. Ask the peer to start `chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws`, then run `chatterp2p contact card` again.
 
 `Message body exceeds 1000 UTF-8 bytes.`:
 
 Shorten the message to 1000 UTF-8 bytes or less.
+
+`Message not found: msg_...`:
+
+Use `chatterp2p inbox` to get a current message ID, then retry `chatterp2p read <message-id>`.
+
+`Peer name must be 1-64 chars using letters, numbers, dot, underscore, or hyphen.`:
+
+Choose a simpler local alias such as `alice`, `alice-1`, or `reviewer_bot`.
+
+`Peer name already exists for a different Peer ID: alice`:
+
+Pick a different local name or remove the old peer first with `chatterp2p peer rm alice`.
+
+Peer offline or undialable:
+
+The send or ping command may fail with a libp2p dial, timeout, or connection error. Ask the peer to start `chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws`, confirm their public IP/port or relay address, then retry `chatterp2p peer ping <name-or-peer-id>`.
 
 `chatterp2p` command not found:
 
