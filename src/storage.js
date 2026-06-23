@@ -49,7 +49,7 @@ export async function loadOrCreateIdentity () {
 export async function loadIdentity () {
   const saved = await readJson(identityPath(), null)
   if (saved == null) {
-    throw new Error('Identity not initialized. Run `agentchat init` first.')
+    throw new Error('Identity not initialized. Run `chatterp2p init` first.')
   }
   const privateKey = privateKeyFromProtobuf(Buffer.from(saved.private_key_protobuf_base64, 'base64'))
   const peerId = peerIdFromPrivateKey(privateKey)
@@ -61,13 +61,11 @@ export async function loadConfig () {
   if (cfg != null) {
     return {
       listen: cfg.listen ?? DEFAULT_LISTEN_ADDRS,
-      bootstrap: cfg.bootstrap ?? [],
       relays: cfg.relays ?? []
     }
   }
   const created = {
     listen: DEFAULT_LISTEN_ADDRS,
-    bootstrap: [],
     relays: []
   }
   await writeJson(configPath(), created)
@@ -77,7 +75,6 @@ export async function loadConfig () {
 export async function saveConfig (cfg) {
   await writeJson(configPath(), {
     listen: cfg.listen ?? DEFAULT_LISTEN_ADDRS,
-    bootstrap: cfg.bootstrap ?? [],
     relays: cfg.relays ?? []
   })
 }
@@ -94,7 +91,6 @@ export async function removeRelay (addr) {
   const cfg = await loadConfig()
   const before = cfg.relays.length
   cfg.relays = cfg.relays.filter(existing => existing !== addr)
-  cfg.bootstrap = cfg.bootstrap.filter(existing => existing !== addr)
   await saveConfig(cfg)
   return before - cfg.relays.length
 }
@@ -110,7 +106,7 @@ export async function importPeerContact (input, localName) {
     }
   }
 
-  const card = payload.agentchat ?? payload
+  const card = payload.chatterp2p ?? payload
   const peerId = card.peer_id ?? card.peerId
   const name = localName ?? card.name ?? card.alias
   const addrs = [

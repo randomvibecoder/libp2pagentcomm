@@ -4,11 +4,11 @@ import os from 'node:os'
 const home = os.homedir()
 
 export function configDir () {
-  return process.env.AGENTCHAT_CONFIG_DIR || path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'agentchat')
+  return process.env.CHATTERP2P_CONFIG_DIR || path.join(process.env.XDG_CONFIG_HOME || path.join(home, '.config'), 'chatterp2p')
 }
 
 export function dataDir () {
-  return process.env.AGENTCHAT_DATA_DIR || path.join(process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'agentchat')
+  return process.env.CHATTERP2P_DATA_DIR || path.join(process.env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'chatterp2p')
 }
 
 export function identityPath () {

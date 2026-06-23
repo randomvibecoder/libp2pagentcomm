@@ -1,10 +1,10 @@
 {
-  "name": "agentchat",
+  "name": "chatterp2p",
   "version": "0.0.1",
   "description": "Local-first libp2p DMs for agents",
   "type": "module",
   "bin": {
-    "agentchat": "./src/cli.js"
+    "chatterp2p": "./src/cli.js"
   },
   "scripts": {
     "test": "node --test"

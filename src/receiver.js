@@ -8,7 +8,7 @@ export function parseReceiverOptions (args) {
     const arg = args[i]
     if (arg === '--listen') {
       const addr = args[++i]
-      if (addr == null) throw new Error('Usage: agentchat daemon start [--listen <multiaddr>]')
+      if (addr == null) throw new Error('Usage: chatterp2p daemon start [--listen <multiaddr>]')
       opts.listen.push(addr)
     } else if (arg.startsWith('--')) {
       throw new Error(`Unknown option: ${arg}`)

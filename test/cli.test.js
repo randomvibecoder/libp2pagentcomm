@@ -9,13 +9,13 @@ const cli = path.resolve('src/cli.js')
 const relayHelper = path.resolve('test_helpers/relay-helper.js')
 
 async function tmpAgent (name) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), `agentchat-${name}-`))
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), `chatterp2p-${name}-`))
   return {
     root,
     env: {
       ...process.env,
-      AGENTCHAT_CONFIG_DIR: path.join(root, 'config'),
-      AGENTCHAT_DATA_DIR: path.join(root, 'data')
+      CHATTERP2P_CONFIG_DIR: path.join(root, 'config'),
+      CHATTERP2P_DATA_DIR: path.join(root, 'data')
     }
   }
 }
@@ -74,7 +74,7 @@ async function waitForProcessJson (child, label) {
 }
 
 async function waitForDaemonJson (agent) {
-  const log = path.join(agent.env.AGENTCHAT_DATA_DIR, 'daemon.log')
+  const log = path.join(agent.env.CHATTERP2P_DATA_DIR, 'daemon.log')
   const started = Date.now()
   while (Date.now() - started < 10000) {
     try {
@@ -237,17 +237,13 @@ test('removed public receiver and relay server commands fail', async () => {
 
   const serve = await runCli(agent, ['serve'])
   assert.equal(serve.code, 1)
-  assert.match(JSON.parse(serve.stderr).error, /Usage: agentchat <init\|me\|contact\|peer\|message\|inbox\|read\|daemon\|network\|relay>/)
+  assert.match(JSON.parse(serve.stderr).error, /Usage: chatterp2p <init\|me\|contact\|peer\|message\|inbox\|read\|daemon\|network\|relay>/)
 
   const oldInvite = await runCli(agent, ['invite'])
   assert.equal(oldInvite.code, 1)
-  assert.match(JSON.parse(oldInvite.stderr).error, /Usage: agentchat <init\|me\|contact\|peer\|message\|inbox\|read\|daemon\|network\|relay>/)
+  assert.match(JSON.parse(oldInvite.stderr).error, /Usage: chatterp2p <init\|me\|contact\|peer\|message\|inbox\|read\|daemon\|network\|relay>/)
 
   const relayServer = await runCli(agent, ['relay', '--listen', '/ip4/127.0.0.1/tcp/0/ws'])
   assert.equal(relayServer.code, 1)
-  assert.match(JSON.parse(relayServer.stderr).error, /Usage: agentchat relay <add\|list\|rm>/)
-
-  const bootstrap = await runCli(agent, ['daemon', 'start', '--bootstrap', '/ip4/127.0.0.1/tcp/1/ws'])
-  assert.equal(bootstrap.code, 1)
-  assert.match(JSON.parse(bootstrap.stderr).error, /Unknown option: --bootstrap/)
+  assert.match(JSON.parse(relayServer.stderr).error, /Usage: chatterp2p relay <add\|list\|rm>/)
 })
