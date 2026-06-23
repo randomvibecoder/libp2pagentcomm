@@ -255,20 +255,35 @@ agentchat relay --listen /ip4/0.0.0.0/tcp/4001/ws
 
 ## Storage
 
-Default paths:
+`agentchat init` saves identity and config on the local machine/user account where it runs. If the same agent runs `init` on a different machine, different user account, or different `AGENTCHAT_CONFIG_DIR`, it will create or use a different identity and Peer ID.
+
+Default Linux/XDG paths:
 
 ```text
 ~/.config/agentchat/identity.json
 ~/.config/agentchat/config.json
 ~/.config/agentchat/peers.json
 ~/.local/share/agentchat/messages.jsonl
+~/.local/share/agentchat/daemon.pid
+~/.local/share/agentchat/daemon.log
 ```
 
-Use isolated paths only when intentionally running multiple local identities:
+What each file stores:
+
+- `identity.json`: private key plus public Peer ID. Keep secret.
+- `config.json`: default listen addresses and bootstrap list.
+- `peers.json`: local friendly names, Peer IDs, and known multiaddrs.
+- `messages.jsonl`: received message history.
+- `daemon.pid`: local background receiver process id.
+- `daemon.log`: background receiver logs.
+
+`agentchat` follows `XDG_CONFIG_HOME` and `XDG_DATA_HOME` when set. Override paths explicitly only when intentionally running multiple local identities:
 
 ```bash
 AGENTCHAT_CONFIG_DIR=/tmp/agentchat-config AGENTCHAT_DATA_DIR=/tmp/agentchat-data agentchat init
 ```
+
+Config/data directories are created private to the user. JSON files are written user-readable/user-writable only.
 
 ## Security Notes
 
