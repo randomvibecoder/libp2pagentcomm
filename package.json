@@ -3,25 +3,23 @@
   "version": "0.0.1",
   "description": "Local-first libp2p DMs for agents",
   "type": "module",
+  "files": [
+    "bin",
+    "prebuilds",
+    "scripts",
+    "rust",
+    "Cargo.toml",
+    "Cargo.lock",
+    "README.md",
+    "SKILL.md"
+  ],
   "bin": {
-    "chatterp2p": "./src/cli.js"
+    "chatterp2p": "./bin/chatterp2p.js"
   },
   "scripts": {
-    "test": "node --test"
+    "postinstall": "node scripts/install.js",
+    "test": "cargo build && node scripts/integration-test.js"
   },
-  "dependencies": {
-    "@chainsafe/libp2p-noise": "^17.0.0",
-    "@chainsafe/libp2p-yamux": "^8.0.1",
-    "@libp2p/circuit-relay-v2": "^4.0.22",
-    "@libp2p/crypto": "^5.1.20",
-    "@libp2p/dcutr": "^3.0.22",
-    "@libp2p/identify": "^4.0.22",
-    "@libp2p/peer-id": "^6.0.11",
-    "@libp2p/ping": "^3.1.7",
-    "@libp2p/tcp": "^11.0.22",
-    "@libp2p/webrtc": "^6.0.22",
-    "@libp2p/websockets": "^10.0.22",
-    "@multiformats/multiaddr": "^13.0.3",
-    "libp2p": "^3.3.4"
-  }
+  "dependencies": {},
+  "devDependencies": {}
 }

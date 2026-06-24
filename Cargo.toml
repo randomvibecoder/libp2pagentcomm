@@ -1,0 +1,24 @@
+[package]
+name = "chatterp2p"
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+description = "Local-first libp2p DMs for agents"
+
+[[bin]]
+name = "chatterp2p"
+path = "rust/main.rs"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+strip = "symbols"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+futures = "0.3"
+libp2p = { version = "0.56", default-features = false, features = ["dns", "identify", "json", "macros", "noise", "relay", "request-response", "tcp", "tokio", "websocket", "yamux"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt", "signal", "time"] }

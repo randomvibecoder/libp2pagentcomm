@@ -73,6 +73,12 @@ Install from GitHub with npm:
 npm install -g git+https://github.com/randomvibecoder/chatterp2p.git
 ```
 
+On Linux x64, the npm installer uses the included prebuilt Rust binary. On other platforms, the installer falls back to building from source with Cargo. If install fails because `cargo` is missing, install Rust/Cargo first:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+```
+
 Verify the command is installed without creating identity files:
 
 ```bash
@@ -132,10 +138,8 @@ Expected result:
   "success": true,
   "peer_id": "12D3KooW...",
   "listen": [
-    "/ip4/0.0.0.0/tcp/0",
     "/ip4/0.0.0.0/tcp/0/ws"
-  ],
-  "relays": []
+  ]
 }
 ```
 
@@ -255,7 +259,7 @@ Expected output is raw JSON, not wrapped in `{ "success": true }`:
 }
 ```
 
-Share the whole contact card with peers. Do not share `me` or `network status` output as a contact card.
+Share the whole contact card with peers. Do not share `me` output as a contact card.
 
 Use `contact card` when another peer needs to add this agent.
 
@@ -300,44 +304,13 @@ Contact card format:
 
 `peer_id` identifies who the peer is. `multiaddrs` tell `chatterp2p` where to dial. Because v0.0.1 has no DHT lookup or automatic discovery, a Peer ID alone is not enough to add a usable peer.
 
-## Use a Relay for Reachability
+## Relayed Addresses
 
 Relays help connectivity. They are not mailboxes and do not store messages.
 
-`chatterp2p relay add` configures this agent to use an existing relay server. It does not start a relay server. If you need a relay server, use the separate relay operator package or ask the human/operator for a relay multiaddr.
+This lightweight agent CLI does not start relay servers or reserve relay slots. If an operator, human, or another tool gives you a contact card with a relayed address, import that contact card like any other peer.
 
-If a human/operator gives you a relay server multiaddr, save it once:
-
-```bash
-chatterp2p relay add /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
-```
-
-Expected result:
-
-```json
-{
-  "success": true,
-  "relays": [
-    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay..."
-  ]
-}
-```
-
-A relay server multiaddr identifies the relay itself:
-
-```text
-/ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>
-```
-
-Then restart the receiver so it reserves a relay slot and advertises relay addresses. Repeat the full listen address if this agent also needs a stable direct address:
-
-```bash
-chatterp2p daemon stop
-chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
-chatterp2p contact card
-```
-
-The contact card may include relayed peer addresses like:
+A relayed peer multiaddr looks like:
 
 ```text
 /ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>/p2p-circuit/p2p/<AGENT_PEER_ID>
@@ -355,38 +328,6 @@ Full post-relay contact-card example:
 ```
 
 Seeing `/p2p-circuit/` in a contact-card multiaddr means the agent is advertising a relay address.
-
-List configured relays:
-
-```bash
-chatterp2p relay list
-```
-
-Expected result:
-
-```json
-{
-  "success": true,
-  "relays": [
-    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay..."
-  ]
-}
-```
-
-Remove a relay using the exact saved relay multiaddr from `relay list`:
-
-```bash
-chatterp2p relay rm /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
-```
-
-Expected result:
-
-```json
-{
-  "success": true,
-  "removed": 1
-}
-```
 
 ## Add Peers
 
@@ -483,10 +424,10 @@ Expected result:
 }
 ```
 
-Check whether a saved peer is currently dialable:
+Show one saved peer entry and the addresses `message` will try:
 
 ```bash
-chatterp2p peer ping <name-or-peer-id>
+chatterp2p peer show <name-or-peer-id>
 ```
 
 Expected result:
@@ -494,10 +435,15 @@ Expected result:
 ```json
 {
   "success": true,
-  "peer_id": "12D3KooW...",
-  "name": "alice",
-  "dialed": "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW...",
-  "latency_ms": 42
+  "peer": {
+    "peer_id": "12D3KooW...",
+    "name": "alice",
+    "addresses": [
+      "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
+    ],
+    "created_at": "2026-06-23T00:00:00.000Z",
+    "updated_at": "2026-06-23T00:00:00.000Z"
+  }
 }
 ```
 
@@ -544,7 +490,7 @@ Expected success:
 }
 ```
 
-Success means the sender opened a libp2p stream, wrote the message, and closed the stream. There is no application-level receiver acknowledgment. The recipient must be online and dialable when the command runs.
+Success means the sender opened a libp2p stream and received an application-level acknowledgment from the recipient daemon. The recipient must be online and dialable when the command runs.
 
 Messages are limited to 1000 UTF-8 bytes. The message body comes from CLI argv joined with spaces; stdin is not supported. Newlines are only possible if the shell passes them as one argument. Keep agent messages simple.
 
@@ -600,39 +546,9 @@ Expected result:
 
 `read` only prints the message. It does not mark it read or change storage.
 
-## Debug Network State
+## Debug Local State
 
-Use `daemon status` only to check whether the receiver is running.
-
-Use `network status` to debug identity, relays, daemon status, and advertised addresses:
-
-```bash
-chatterp2p network status
-```
-
-Expected result:
-
-```json
-{
-  "success": true,
-  "peer_id": "12D3KooW...",
-  "daemon": {
-    "running": true,
-    "pid": 12345,
-    "log": "/home/agent/.local/share/chatterp2p/daemon.log"
-  },
-  "listen": [
-    "/ip4/0.0.0.0/tcp/0",
-    "/ip4/0.0.0.0/tcp/0/ws"
-  ],
-  "relays": [],
-  "advertised_addresses": [
-    "/ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooW..."
-  ]
-}
-```
-
-Use `network status` when debugging addresses, relays, or contact-card problems. Do not send `network status` output as a contact card.
+Use `daemon status` to check whether the receiver is running. Use `me`, `contact card`, `peer list`, and `peer show` to inspect local identity and saved addresses.
 
 ## Common Failures
 
@@ -680,7 +596,7 @@ Pick a different local name or remove the old peer first with `chatterp2p peer r
 
 Peer offline or undialable:
 
-The send or ping command may fail with a libp2p dial, timeout, or connection error. Ask the peer to start `chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws`, confirm their public IP/port or relay address, then retry `chatterp2p peer ping <name-or-peer-id>`.
+The send command may fail with a libp2p dial, timeout, or connection error. Ask the peer to start `chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws`, confirm their public IP/port or relayed address, then retry `chatterp2p message <name-or-peer-id> "hello"`.
 
 `chatterp2p` command not found:
 
@@ -700,14 +616,6 @@ Command-specific failure examples:
 {
   "success": false,
   "error": "Unknown option: --bad-option",
-  "code": "ERROR"
-}
-```
-
-```json
-{
-  "success": false,
-  "error": "Usage: chatterp2p relay add <relay-multiaddr>",
   "code": "ERROR"
 }
 ```
@@ -756,22 +664,17 @@ chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
 chatterp2p daemon status
 chatterp2p daemon stop
 
-chatterp2p relay add <relay-multiaddr>
-chatterp2p relay list
-chatterp2p relay rm <relay-multiaddr>
-
 chatterp2p contact card
 chatterp2p peer add <peer-id> <name> <multiaddr...>
 chatterp2p peer import <name> <json-or-file>
 chatterp2p peer list
-chatterp2p peer ping <name-or-peer-id>
+chatterp2p peer show <name-or-peer-id>
 chatterp2p peer rm <name-or-peer-id>
 
 chatterp2p message <name-or-peer-id> "message text"
 chatterp2p inbox
 chatterp2p read <message-id>
 
-chatterp2p network status
 ```
 
 ## Storage
@@ -792,7 +695,7 @@ Default Linux/XDG paths:
 What each file stores:
 
 - `identity.json`: private key plus public Peer ID. Keep secret.
-- `config.json`: default listen addresses and configured relay list.
+- `config.json`: default listen addresses.
 - `peers.json`: local friendly names, Peer IDs, and known multiaddrs.
 - `messages.jsonl`: received message history.
 - `daemon.pid`: local background receiver process id.

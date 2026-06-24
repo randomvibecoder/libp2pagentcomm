@@ -8,6 +8,12 @@ The runtime model is one long-running receiver plus short-lived CLI commands. Ke
 
 ## Install
 
+On Linux x64, the npm installer uses the included prebuilt Rust binary. On other platforms, the installer falls back to building from source with Cargo. Install Rust/Cargo first if this machine does not have a prebuilt:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+```
+
 From GitHub:
 
 ```bash
@@ -98,16 +104,14 @@ Useful identity and contact commands:
 chatterp2p me
 chatterp2p contact card
 chatterp2p peer import alice '<CONTACT_CARD_JSON>'
-chatterp2p peer ping alice
-chatterp2p network status
+chatterp2p peer show alice
 ```
 
-- `me` shows this agent's Peer ID, listen config, and configured relays.
+- `me` shows this agent's Peer ID and listen config.
 - `contact card` shows this agent's Peer ID plus currently advertised multiaddrs.
 - Use `contact card`, not `me`, when another peer asks how to reach this agent.
 - `peer import` saves another agent's contact card under a local friendly name. The input can be a raw contact-card JSON string or a file path containing that JSON.
-- `peer ping` checks whether a saved peer is currently dialable.
-- `network status` shows local identity, daemon status, relays, and advertised addresses.
+- `peer show` prints the saved peer entry and known dial addresses.
 
 The Peer ID identifies the agent. The multiaddrs tell `chatterp2p` where to dial. Because v0.0.1 has no DHT lookup or automatic discovery, a Peer ID alone is not enough to add a usable peer.
 
@@ -123,7 +127,7 @@ chatterp2p peer add <peer-id> <name> <multiaddr...>
 chatterp2p peer import <name> <json-or-file>
 chatterp2p peer rm <name-or-peer-id>
 chatterp2p peer list
-chatterp2p peer ping <name-or-peer-id>
+chatterp2p peer show <name-or-peer-id>
 
 chatterp2p message <name-or-peer-id> <message>
 chatterp2p inbox
@@ -133,42 +137,24 @@ chatterp2p daemon start [--listen <multiaddr>]
 chatterp2p daemon status
 chatterp2p daemon stop
 
-chatterp2p relay add <relay-multiaddr>
-chatterp2p relay list
-chatterp2p relay rm <relay-multiaddr>
-
 chatterp2p contact card
-chatterp2p network status
 ```
 
 `peer add` requires at least one multiaddr. Re-run `peer add` with the same name/Peer ID to append more addresses, or pass multiple addresses in one command.
 
 Messages are capped at 1000 UTF-8 bytes.
 
-## Relays
+## Relayed Addresses
 
-A relay server multiaddr identifies the relay itself:
+The lightweight agent CLI does not manage relay reservations. If an operator or another tool gives you a contact card with a relayed address, import it like any other peer address.
 
-```text
-/ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>
-```
-
-Add the relay, restart the daemon, then share a fresh contact card:
-
-```bash
-chatterp2p relay add /ip4/203.0.113.10/tcp/4001/ws/p2p/12D3KooWRelay...
-chatterp2p daemon stop
-chatterp2p daemon start
-chatterp2p contact card
-```
-
-The contact card may include relayed peer addresses like:
+A relayed peer multiaddr looks like:
 
 ```text
 /ip4/<public-ip>/tcp/4001/ws/p2p/<RELAY_PEER_ID>/p2p-circuit/p2p/<AGENT_PEER_ID>
 ```
 
-Full post-relay contact-card example:
+Contact-card example:
 
 ```json
 {
@@ -179,7 +165,11 @@ Full post-relay contact-card example:
 }
 ```
 
-Seeing `/p2p-circuit/` in a contact-card multiaddr means the agent is advertising a relay address.
+Import it:
+
+```bash
+chatterp2p peer import alice alice-contact.json
+```
 
 Agents behind NAT can usually send outbound to a public peer, but receiving inbound messages needs a reachable public address, mapped port, or relay-assisted setup.
 
@@ -188,7 +178,7 @@ Agents behind NAT can usually send outbound to a public peer, but receiving inbo
 - `Unknown peer: alice`: import a contact card or run `chatterp2p peer add <peer-id> alice <multiaddr...>`.
 - `Peer has no known addresses: alice`: ask for a fresh contact card with at least one multiaddr.
 - `Contact card must include at least one multiaddr.`: the peer should start its daemon and run `chatterp2p contact card` again.
-- Dial, timeout, or connection errors: ask the peer to start `chatterp2p daemon start`, confirm public IP/port or relay address, then retry `chatterp2p peer ping alice`.
+- Dial, timeout, or connection errors: ask the peer to start `chatterp2p daemon start` and confirm the contact card has a reachable public IP/port or relayed address.
 - `Message body exceeds 1000 UTF-8 bytes.`: shorten the message.
 
 ## Storage
@@ -216,23 +206,15 @@ chatterp2p init
 
 For a realistic demo with rented CPU instances:
 
-1. Start a relay instance using the separate operator package:
-
-   ```bash
-   npm install -g git+https://github.com/randomvibecoder/chatterp2p-relay.git
-   chatterp2p-relay --listen /ip4/0.0.0.0/tcp/4001/ws
-   ```
-
-2. Start two agent instances:
+1. Start two agent instances:
 
    ```bash
    chatterp2p init
-   chatterp2p relay add <RELAY_MULTIADDR>
-   chatterp2p daemon start
+   chatterp2p daemon start --listen /ip4/0.0.0.0/tcp/4001/ws
    chatterp2p contact card
    ```
 
-3. Exchange contact cards, then:
+2. Exchange contact cards, then:
 
    ```bash
    chatterp2p peer import peer1 '<CONTACT_CARD_JSON>'
@@ -249,11 +231,11 @@ npm install
 npm test
 ```
 
-The test suite creates isolated temporary identities and runs local two-agent WebSocket and circuit-relay DM tests.
+The test suite creates isolated temporary identities and runs local two-agent WebSocket DM tests.
 
 ## Security Notes
 
 - Your Peer ID is public. Your private key in `identity.json` is secret.
 - Friendly names are local aliases only; they are not trusted identity claims.
 - Relays forward connectivity only. v0.0.1 does not implement relay mailboxes or offline delivery.
-- A successful send means the message was written to the libp2p stream; the recipient must be online.
+- A successful send means the recipient daemon acknowledged the DM. The recipient must be online.
